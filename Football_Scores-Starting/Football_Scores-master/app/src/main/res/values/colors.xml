@@ -76,5 +76,7 @@
     <color name="red13">#FFCACA</color>
     <color name="red14">#FFE4E4</color>
 
-
+    <color name="blue_app_list_item">#00B8D4</color>
+    <color name="blue_app_background">#05E9F5</color>
+    <color name="black_app_text_color">#000000</color>
 </resources>
