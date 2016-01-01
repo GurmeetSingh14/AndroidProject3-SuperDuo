@@ -1,7 +1,6 @@
 package it.jaschke.alexandria;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.os.Bundle;
@@ -23,6 +22,7 @@ import android.widget.Toast;
 import it.jaschke.alexandria.data.AlexandriaContract;
 import it.jaschke.alexandria.services.BookService;
 import it.jaschke.alexandria.services.DownloadImage;
+import it.jaschke.alexandria.services.Utility;
 
 
 public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<Cursor> {
@@ -33,6 +33,7 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
     private final String EAN_CONTENT="eanContent";
     private static final String SCAN_FORMAT = "scanFormat";
     private static final String SCAN_CONTENTS = "scanContents";
+    private static final int SCAN_BOOK_ISBN_REQUEST = 1;
 
     private String mScanFormat = "Format:";
     private String mScanContents = "Contents:";
@@ -78,12 +79,19 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
                     clearFields();
                     return;
                 }
-                //Once we have an ISBN, start a book intent
-                Intent bookIntent = new Intent(getActivity(), BookService.class);
-                bookIntent.putExtra(BookService.EAN, ean);
-                bookIntent.setAction(BookService.FETCH_BOOK);
-                getActivity().startService(bookIntent);
-                AddBook.this.restartLoader();
+                //Once we have an ISBN, check for the available network
+                //If the network is available, start a book intent
+                if(!Utility.isNetworkAvailable(getActivity())){
+                    ((TextView)rootView.findViewById(R.id.bookSubTitle)).setText(R.string.network_unavailable);
+                    return;
+                } else {
+                    Intent bookIntent = new Intent(getActivity(), BookService.class);
+                    bookIntent.putExtra(BookService.EAN, ean);
+                    bookIntent.setAction(BookService.FETCH_BOOK);
+                    getActivity().startService(bookIntent);
+                    AddBook.this.restartLoader();
+                }
+
             }
         });
 
@@ -96,12 +104,7 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
                 // Hint: Use a Try/Catch block to handle the Intent dispatch gracefully, if you
                 // are using an external app.
                 //when you're done, remove the toast below.
-                Context context = getActivity();
-                CharSequence text = "This button should let you scan a book for its barcode!";
-                int duration = Toast.LENGTH_SHORT;
-
-                Toast toast = Toast.makeText(context, text, duration);
-                toast.show();
+                launchBarcodeScanner(v);
 
             }
         });
@@ -168,9 +171,15 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
         ((TextView) rootView.findViewById(R.id.bookSubTitle)).setText(bookSubTitle);
 
         String authors = data.getString(data.getColumnIndex(AlexandriaContract.AuthorEntry.AUTHOR));
-        String[] authorsArr = authors.split(",");
-        ((TextView) rootView.findViewById(R.id.authors)).setLines(authorsArr.length);
+
+        String[] authorsArr = {""};
+        if(authors != null) {
+         authorsArr =  authors.split(",");
         ((TextView) rootView.findViewById(R.id.authors)).setText(authors.replace(",","\n"));
+        }
+
+        ((TextView) rootView.findViewById(R.id.authors)).setLines(authorsArr.length);
+
         String imgUrl = data.getString(data.getColumnIndex(AlexandriaContract.BookEntry.IMAGE_URL));
         if(Patterns.WEB_URL.matcher(imgUrl).matches()){
             new DownloadImage((ImageView) rootView.findViewById(R.id.bookCover)).execute(imgUrl);
@@ -203,5 +212,26 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
     public void onAttach(Activity activity) {
         super.onAttach(activity);
         activity.setTitle(R.string.scan);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        //Check if we are respoinding to SCAN request
+        if(requestCode == SCAN_BOOK_ISBN_REQUEST){
+            if(resultCode == getActivity().RESULT_OK){
+                String strISBN = data.getStringExtra("ISBN").toString();
+
+                ean = (EditText) getActivity().findViewById(R.id.ean);
+                ean.setText(strISBN);
+            } else if(resultCode == getActivity().RESULT_CANCELED){
+                Toast toast = Toast.makeText(getActivity(), R.string.not_found, Toast.LENGTH_LONG);
+                toast.show();
+            }
+        }
+    }
+
+    public void launchBarcodeScanner(View v){
+        Intent intent = new Intent(getActivity(), AlexandriaBarcodeScanner.class);
+        startActivityForResult(intent, SCAN_BOOK_ISBN_REQUEST);
     }
 }
